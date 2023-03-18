@@ -253,4 +253,71 @@ func main() {
 
 > map[key]value 不支持零值可用，和切片一样，零值为nil，需要初始化才能使用
 
-### map初始化
+### map声明和初始化
++ 声明 var m map[type]type
++ make初始化 m = make(map[type]type, len, cap)
++ 直接创建 m := make(map[type]type, len, cap)
++ 初始化加赋值一起 m := map[type]type {key:value }
+
+### map的基本操作
++ 插入数据 m[k] = v, 如果k存在，那么新值会覆盖旧值
++ 获取个数 len(m)
++ 查找和数据读取 v,ok := m[k]
++ 删除数据 delete(m,"key")
++ 遍历数据 for k, v := range m , **注意：map多次遍历出来的顺序并不相同**
+
+### map扩容
+
+## string字符串
+
+> string类型也是一个描述符，由一个指向底层存储的指针和字符串长度字段组成
+
++ string类型的数据不可变
++ 零值可用
++ 获取长度的时间复杂度是O(1)级别
++ 通过 + 操作符进行字符串连接
++ 支持比较关系操作符
++ 对非ASCII字符串提供原生支持
++ 原生支持多行字符串 ``
+
+### string声明和初始化
+字符串构造
++ 使用fmt.Sprintf
++ 使用strings.Join
++ 使用strings.Builder
++ 使用bytes.Buffer
+
+声明 var s string
+
+初始化 s := "ssss"
+
+### string转换
+> string []rune []byte 可以互相转换
+
+## 函数和方法
+> go语言中，函数是唯一一种基于特定输入、实现特定任务并反馈任务执行结果的代码块。**本质上，GO程序就是一组函数的集合**
++ 以func关键字开头
++ 支持多返回值
++ 支持具名返回值
++ 支持递归调用
++ 支持同类型的可变参数
++ 支持defer，实现函数优雅返回
+
+### 函数一等公民
+> Go中的函数可以像普通整型值那样被创建和使用
+
++ 正常创建
++ 在函数内创建
++ 作为类型
++ 存储到变量中
++ 作为参数传入函数
++ 作为返回值从函数返回
+
+### defer
++ 拦截panic
++ 修改函数的具名返回值
++ 输出调试信息
++ 还原变量旧值
+
+### 理解方法的本质以选择正确的receiver类型
+
