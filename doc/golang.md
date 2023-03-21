@@ -381,6 +381,20 @@ func main() {
 + 输出调试信息
 + 还原变量旧值
 
+> 三种defer性能
++ 对于开放编码defer
+	+ 编译器会直接将所需的参数进行存储，并在返回语句的末尾插入被延迟的调用
+	+ 当整个调用中逻辑上会执行的 defer 不超过 15 个（例如七个 defer 作用在两个返回语句）、总 defer 数量不超过 8 个、且没有出现在循环语句中时，会激活使用此类 defer；
+	+ 此类 defer 的唯一的运行时成本就是存储参与延迟调用的相关信息，运行时性能最好
++ 对于栈上分配的defer
+	+ 编译器会直接在栈上记录一个 _defer 记录，该记录不涉及内存分配，并将其作为参数，传入被翻译为 deferprocStack 的延迟语句，在延迟调用的位置将 _defer 压入 Goroutine 对应的延迟调用链表中；
+	+ 在函数末尾处，通过编译器的配合，在调用被 defer 的函数前，调用 deferreturn，将被延迟的调用出栈并执行；
+	+ 此类 defer 的唯一运行时成本是从 _defer 记录中将参数复制出，以及从延迟调用记录链表出栈的成本，运行时性能其次。
++ 对于堆上分配的 defer 
+	+ 编译器首先会将延迟语句翻译为一个 deferproc 调用，进而从运行时分配一个用于记录被延迟调用的 _defer 记录，并将被延迟的调用的入口地址及其参数复制保存，入栈到 Goroutine 对应的延迟调用链表中；
+	+ 在函数末尾处，通过编译器的配合，在调用被 defer 的函数前，调用 deferreturn，从而将 _defer 实例归还到资源池，而后通过模拟尾递归的方式来对需要 defer 的函数进行调用。
+	+ 此类 defer 的主要性能问题存在于每个 defer 语句产生记录时的内存分配，记录参数和完成调用时的参数移动时的系统调用，运行时性能最差。
+
 ```go
 package main
 import (
@@ -431,8 +445,213 @@ func main() {
 
 + d3 defer放入栈中的时候i值确定了，传入进了闭包，所以不需要往外部找i，直接通过参数获取了值
 
-### panic和defer
+### panic、defer、recover
 > panic()是一个内置的Go函数，它终止Go程序的当前流程并开始panicking！ 另一方面，recover()函数也是一个内置的Go函数，允许你收回那些使用了panic()函数的goroutine的控制权。
+
+> 通常写法
+```go
+defer func() {
+		if err := recover(); err !=nil {
+			fmt.Println(err)
+		}
+	}()
+```
+> 作用域:recover只是针对当前函数和以及直接调用的函数可能产生的panic，它无法处理其调用产生的其他协程的panic
+
+### panic、defer、recover 情况
+> 1.一旦运行test2() 函数会导致panic,程序会立即挂掉
+```go
+package main
+ 
+import (
+	"fmt"
+)
+ 
+ 
+func main() {
+	test1()       //输出：this is test 1
+	test2()       //输出：this is test 2  panic: test 2 is panic   直接挂掉
+	test3()                 
+}
+ 
+func test1 (){
+	fmt.Println("this is test 1")
+}
+ 
+func test2 (){
+	fmt.Println("this is test 2")
+	panic("test 2 is panic")
+}
+ 
+func test3 (){
+	fmt.Println("this is test 3")
+}
+ 
+ 
+```
+> 2.当我们在test2() 函数加入recover()时，程序运行到test2()函数，报panic 错误不会挂掉，程序会继续进行，执行test()3函数。
+
+```go
+package main
+ 
+import (
+	"fmt"
+)
+ 
+ 
+func main() {
+	test1()   //输出：this is test 1
+	test2()   //输出：this is test 2  test 2 is  panic
+	test3()   //输出：this is test 3
+}
+ 
+func test1 (){
+	fmt.Println("this is test 1")
+}
+ 
+func test2 (){
+	defer func() {
+		if err := recover(); err !=nil {
+			fmt.Println(err)
+		}
+	}()
+	fmt.Println("this is test 2")
+	panic("test 2 is panic")
+}
+ 
+func test3 (){
+	fmt.Println("this is test 3")
+}
+ 
+ 
+```
+> 3.当我们把 recover() 放在 直接调用的test2()的main 函数之中时，当程序执行到test2函数时，报panic 这时test2()程序中断，程序不会往下执行，而是直接执行defer 中的recover()函数（同时说明，即使程序某个位置报了panic错误，最后也会执行defer），整个程序不会挂掉。
+```go
+package main
+ 
+import (
+	"fmt"
+)
+ 
+ 
+func main() {
+	defer func() {
+		if err := recover(); err !=nil {
+			fmt.Println(err)
+		}
+	}()
+	test1()    //输出： this is test 1
+	test2()    //输出： this is test 2; test 2 is panic
+	test3()    //不会执行
+}
+ 
+func test1 (){
+	fmt.Println("this is test 1")
+}
+ 
+func test2 (){
+	fmt.Println("this is test 2")
+	panic("test 2 is panic")
+}
+ 
+func test3 (){
+	fmt.Println("this is test 3")
+}
+ 
+ 
+```
+> 4.当为test2（）开了个go 协程时，程序依然会报panic 导致整个程序挂掉。
+```go
+package main
+ 
+import (
+	"fmt"
+)
+ 
+ 
+func main() {
+ 
+	defer func() {
+		if err := recover(); err !=nil {
+			fmt.Println(err)
+		}
+	}()
+	
+	test1()
+	go test2()
+	test3()
+	for {
+		select {
+ 
+		}
+	}
+}
+ 
+func test1 (){
+	fmt.Println("this is test 1")
+}
+ 
+func test2 (){
+	fmt.Println("this is test 2")
+	panic("test 2 is panic")
+}
+ 
+func test3 (){
+	fmt.Println("this is test 3")
+}
+ 
+ 
+```
+> 5.当为test2()开了个协程时，正确的做法是 在recove()，放在test2()里面才不会导致整个程序挂掉。
+```go
+package main
+ 
+import (
+	"fmt"
+)
+ 
+ 
+func main() {
+ 
+	test1()     // 输出：this is test 1
+	go test2()  //  this is test 2; test 2 is panic
+	test3()     //this is test3
+	for {        //不推荐这样写 会造成死锁  此处只是单单为了 演示
+		select {
+ 
+		}
+	}
+}
+ 
+func test1 (){
+	fmt.Println("this is test 1")
+}
+ 
+func test2 (){
+	defer func() {
+		if err := recover(); err !=nil {
+			fmt.Println(err)
+		}
+	}()
+	fmt.Println("this is test 2")
+	panic("test 2 is panic")
+}
+ 
+func test3 (){
+	fmt.Println("this is test 3")
+}
+ 
+//输出结果：
+// this is test 1
+// this is test 3
+// this is test 2
+// test is panic  
+ 
+```
+> 总结
++ 恢复panic必须要recover配合
++ recover必须位于同一goroutine的直接调用链上，否则panic无法恢复
++ 当一个 panic 被恢复后，调度并因此中断，会重新进入调度循环，进而继续执行 recover 后面的代码， 包括比 recover 更早的 defer（因为已经执行过得 defer 已经被释放， 而尚未执行的 defer 仍在 goroutine 的 defer 链表中），或者 recover 所在函数的调用方。
 
 ### 变长函数
 例子
@@ -529,4 +748,9 @@ c := make(chan string, 10)
 > 5.查询一个通道的长度 len(ch)
 
 通道的元素值的传递都是复制过程
+
+## Go并发
+
+### select关键字
+> select 允许 goroutine 等待多个通信操作。因此，您从 select 获得的主要好处就是它使您能够使用一个select 块处理多个 channels。因此，您可以在 channels 上进行非阻塞操作。
 
