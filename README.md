@@ -6,4 +6,5 @@
 
 ## 目录
 
-[golang基础](doc/golang.md)
++ [golang基础](doc/golang.md)
++ [golang涉及的名词概念解释](doc/golang_more.md)
