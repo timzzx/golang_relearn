@@ -8,3 +8,6 @@
 
 + [golang基础](doc/golang.md)
 + [golang涉及的名词概念解释](doc/golang_more.md)
+> 常规的就不写了
++ [defer](doc/golang_defer.md)
++ [slice](doc/golang_slice.md)
