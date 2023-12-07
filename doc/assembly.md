@@ -527,3 +527,12 @@ caller BP (8 bytes)
 frame content (8 bytes)
 ------ hardware SP
 ```
+
+## 总结
+
+|操作|说明|
+|-|-|
+|INCL AX| 操作数宽度(L双字，Q四字)|
+|MOVL CX, AX| 操作数顺序，CX赋值给AX|
+|[ESP+EBX*2+16] => 16(SP)(BX*2)| 地址的表示|
+|MOVL $123, AX|立即数 $数字|
